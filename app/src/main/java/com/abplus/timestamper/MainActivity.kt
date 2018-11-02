@@ -1,39 +1,126 @@
 package com.abplus.timestamper
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.support.design.widget.Snackbar
-import android.support.v7.app.AppCompatActivity
-import android.view.Menu
-import android.view.MenuItem
+import android.view.View
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import com.abplus.timestamper.models.TimeStamp
+import com.firebase.ui.auth.AuthUI
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.api.GoogleApiClient
+import com.google.android.gms.tasks.Task
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.FirebaseFirestore
 
-import kotlinx.android.synthetic.main.activity_main.*
+class MainActivity : AppCompatActivity(), GoogleApiClient.OnConnectionFailedListener {
 
-class MainActivity : AppCompatActivity() {
+    companion object {
+        private const val REQUEST_SIGN_IN = 5445
+        private const val TIME_STAMPS = "time_stamps"
+
+    }
+
+    private val rootView: View by lazy { findViewById<View>(R.id.root_view) }
+    private val toolbar: Toolbar by lazy { findViewById<Toolbar>(R.id.toolbar) }
+    private val fab: FloatingActionButton by lazy { findViewById<FloatingActionButton>(R.id.fab) }
+
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val store: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
+    private val uid: String? get() = auth.currentUser?.uid
+    private var busy: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         setSupportActionBar(toolbar)
 
-        fab.setOnClickListener { view ->
-            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                .setAction("Action", null).show()
+        fab.setOnClickListener {
+            postTimeStamp()
+        }
+
+        if (isTimestampScheme(intent?.data)) {
+            postTimeStamp()
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == REQUEST_SIGN_IN) {
+            if (resultCode != Activity.RESULT_OK) {
+                // サインインできなかったので終わる
+                Toast.makeText(this, R.string.err_cannot_signin, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        return when (item.itemId) {
-            R.id.action_settings -> true
-            else -> super.onOptionsItemSelected(item)
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+
+        if (isTimestampScheme(intent?.data)) {
+            postTimeStamp()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (uid == null) {
+            signIn()
+        }
+    }
+
+    @Synchronized
+    override fun onConnectionFailed(connectionResult: ConnectionResult) {
+        busy = false
+
+        // つながらなかったので終わる
+        Toast.makeText(this, connectionResult.errorMessage, Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun signIn() {
+        val intent = AuthUI.getInstance()
+            .createSignInIntentBuilder()
+            .setAvailableProviders(listOf(AuthUI.IdpConfig.GoogleBuilder().build()))
+            .build()
+        startActivityForResult(intent, REQUEST_SIGN_IN)
+    }
+
+    private fun isTimestampScheme(uri: Uri?): Boolean = (uri?.scheme == getString(R.string.intent_scheme))
+
+    @Synchronized
+    private fun postTimeStamp() {
+        busy = true
+        val timeStamp = uid?.let { TimeStamp(it) }
+        if (timeStamp != null) {
+            store.collection(TIME_STAMPS)
+                .add(timeStamp.data)
+                .addOnCompleteListener {
+                    task -> onComplete(task)
+                }
+        }
+    }
+
+    @Synchronized
+    private fun onComplete(task: Task<DocumentReference>) {
+        busy = false
+        if (task.isSuccessful) {
+            Snackbar.make(rootView, "", Snackbar.LENGTH_LONG)
+                .setAction(R.string.close) { finish() }
+                .show()
+        } else {
+            // 記録できなかったので終わる
+            Toast.makeText(this, R.string.err_cannot_signin, Toast.LENGTH_SHORT).show()
+            finish()
         }
     }
 }
