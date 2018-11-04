@@ -4,5 +4,8 @@
 
     <string name="err_cannot_signin">サインインできませんでした。</string>
     <string name="err_cannot_stamp">記録できませんでした。</string>
+    <string name="err_cannot_load">データが読み込めませんでした。</string>
+
+    <string name="notification_stamped">%sに記録しました。</string>
     <string name="close">終了</string>
 </resources>
